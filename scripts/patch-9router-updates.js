@@ -40,7 +40,8 @@ function info(msg) { log(`ℹ️  ${msg}`, COLOR.cyan); }
 const args = process.argv.slice(2);
 const isWatch = args.includes("--watch") || args.includes("-w");
 const isServiceInstall = args.includes("--install-service");
-const isCheckOnly = args.includes("--check");
+const isStatus = args.includes("--status") || args.includes("-s");
+const isHelp = args.includes("--help") || args.includes("-h");
 const customDirIndex = args.indexOf("--dir");
 const customDir = customDirIndex !== -1 ? args[customDirIndex + 1] : null;
 
@@ -329,8 +330,88 @@ WantedBy=default.target
   }
 }
 
+// Show service and patch status
+function showStatus() {
+  log("9Router Gemini Tool Enum Patch Monitor - Status", COLOR.bold + COLOR.cyan);
+
+  // Systemd service check
+  try {
+    const isActive = execSync("systemctl --user is-active 9router-patcher.service 2>/dev/null", { encoding: "utf8" }).trim();
+    if (isActive === "active") {
+      success("Systemd service (9router-patcher.service): ACTIVE & RUNNING (starts automatically at boot)");
+    } else {
+      warn(`Systemd service (9router-patcher.service): ${isActive}`);
+    }
+  } catch {
+    warn("Systemd service (9router-patcher.service): NOT ACTIVE. Run: 9router-patcher --install-service");
+  }
+
+  // Check linger status
+  try {
+    const user = process.env.USER || os.userInfo().username;
+    const linger = execSync(`loginctl show-user ${user} | grep -i linger || true`, { encoding: "utf8" }).trim();
+    info(`User lingering: ${linger || "unknown"} (allows background services at boot)`);
+  } catch {}
+
+  console.log("");
+  info("Scanning 9router installation chunks:");
+  const installations = find9RouterInstallations();
+  for (const dir of installations) {
+    const chunks = findTargetChunks(dir);
+    for (const chunk of chunks) {
+      try {
+        const content = fs.readFileSync(chunk, "utf8");
+        const patched = isChunkPatched(content);
+        const upstream = isUpstreamFixed(content);
+        let writable = true;
+        try {
+          fs.accessSync(chunk, fs.constants.W_OK);
+        } catch {
+          writable = false;
+        }
+
+        if (upstream) {
+          success(`[UPSTREAM FIXED] ${chunk}`);
+        } else if (patched) {
+          success(`[PATCHED]        ${chunk} ${writable ? "(writable)" : "(read-only)"}`);
+        } else {
+          warn(`[UNPATCHED]      ${chunk} ${writable ? "(writable)" : "(READ-ONLY - run sudo chown -R $USER:$USER /usr/local/lib/node_modules)"}`);
+        }
+      } catch (err) {
+        error(`Could not read ${chunk}: ${err.message}`);
+      }
+    }
+  }
+}
+
+function showHelp() {
+  console.log(`
+9Router Gemini Tool Enum Sanitizer & Update Watcher
+
+Usage:
+  9router-patcher [options]
+
+Options:
+  --status, -s        Show current patch and systemd service status
+  --watch, -w         Run live monitor watching files and reapplying on update
+  --install-service   Create, enable, and start systemd user service (auto-starts at boot)
+  --dir <path>        Target a specific 9router installation directory
+  --help, -h          Show this help message
+`);
+}
+
 // Main execution
 function main() {
+  if (isHelp) {
+    showHelp();
+    return;
+  }
+
+  if (isStatus) {
+    showStatus();
+    return;
+  }
+
   if (isServiceInstall) {
     installSystemdService();
     return;
