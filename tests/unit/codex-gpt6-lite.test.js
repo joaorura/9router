@@ -11,7 +11,11 @@ const credentials = { connectionId: "fixture", accessToken: "fixture-token" };
 afterEach(() => vi.restoreAllMocks());
 
 describe("Codex GPT-6 Sol/Luna transport", () => {
-  it.each(["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"])("lists %s with Codex capabilities", (model) => {
+  it.each([
+    ["gpt-6.1-sol", 500000],
+    ["gpt-6-sol", 272000],
+    ["gpt-6-luna", 272000],
+  ])("lists %s with Codex capabilities", (model, expectedContextWindow) => {
     const entry = getModelsByProviderId("codex").find((item) => item.id === model);
     expect(entry?.responsesLite).toBe(true);
     expect(entry?.thinkingLevels).toEqual(["low", "medium", "high", "xhigh", "max"]);
@@ -20,7 +24,7 @@ describe("Codex GPT-6 Sol/Luna transport", () => {
       reasoning: true,
       search: true,
       thinkingFormat: "openai",
-      contextWindow: 272000,
+      contextWindow: expectedContextWindow,
       maxOutput: 128000,
     });
     expect(getThinkingLevels("codex", model)).toEqual(["low", "medium", "high", "xhigh", "max"]);
